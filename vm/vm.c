@@ -1,6 +1,11 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
 #include "threads/malloc.h"
+#include "threads/mmu.h"
+#include "threads/vaddr.h"
+#include "userprog/process.h"
+#include "lib/kernel/hash.h"
+
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
@@ -64,7 +69,11 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
+	/* [Pseudo]
+	va에 해당하는 값이 spt에 있는 지 확인.
+	  (true) -> 해당 페이지 반환
+	  (false) -> NULL 반환
+	 */
 
 	return page;
 }
@@ -74,7 +83,11 @@ bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
-	/* TODO: Fill this function. */
+	/* [Pseudo]
+	spt에 va가 있는 지 확인.
+	(true) -> 페이지 insert가 일어나선 안되겠지
+	(false) -> spt에 va에 해당하는 페이지 할당
+	 */
 
 	return succ;
 }
@@ -174,6 +187,10 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	/* [pseudo]
+	아마도,,, virtual page entry 개수 만큼의 리스트 할당. 이를 통해 spt 초기화
+	*/
+	hash_init(&spt->spt_hash, hash_func, less_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */

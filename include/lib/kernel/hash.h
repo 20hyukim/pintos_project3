@@ -97,4 +97,8 @@ uint64_t hash_bytes (const void *, size_t);
 uint64_t hash_string (const char *);
 uint64_t hash_int (int);
 
+/* project 3 */
+uint64_t hash_func(const struct hash_elem *e, void *aux);
+bool less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
+
 #endif /* lib/kernel/hash.h */
