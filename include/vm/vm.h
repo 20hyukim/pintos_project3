@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "lib/kernel/hash.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -34,17 +35,17 @@ enum vm_type {
 struct page_operations;
 struct thread;
 
-#define VM_TYPE(type) ((type) & 7)
+#define VM_TYPE(type) ((type) & 7) /* type의 하위 3비트를 추출하여 페이지의 타입 반환. VM_TYPE(some_type) 을 통해 -> 익명 페이지인지, 파일 페이지인지... 에 대해서 반환함. */
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
-struct page {
+	struct page {
 	const struct page_operations *operations;
-	void *va;              /* Address in terms of user space */
-	struct frame *frame;   /* Back reference for frame */
-
+	void *va;              /* Address in terms of user space -> will stand for virtual address */
+	struct frame *frame;   /* Back reference for frame -> 그니까 VM가 가리키는 PM' Frame을 의미 */
+	struct hash_elem hash_elem;
 	/* Your implementation */
 
 	/* Per-type data are binded into the union.
@@ -61,7 +62,7 @@ struct page {
 
 /* The representation of "frame" */
 struct frame {
-	void *kva;
+	void *kva; /* kva stands for kernel virtual address 물리 메모리 프레임이 커널 공간에서 어디에 매핑되었는지 나타냄.*/
 	struct page *page;
 };
 
@@ -85,6 +86,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+	struct hash spt_hash;
 };
 
 #include "threads/thread.h"
