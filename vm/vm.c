@@ -68,14 +68,22 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
 	/* [Pseudo]
 	va에 해당하는 값이 spt에 있는 지 확인.
 	  (true) -> 해당 페이지 반환
 	  (false) -> NULL 반환
-	 */
 
-	return page;
+	  uint64_t hash_va = hash_bytes(va, sizeof(va)) -> 해시 값을 얻고,
+	  spt -> hash -> buckets ... -> 여기서 해시값에 해당하는 위치 찾고 (이걸 어떻게 할지 조금 애매모호...)
+      있으면? 해당 hash_elem을 &로, 참조해서 해당 페이지 반환.
+	  없으면... NULL 반환
+	 */
+	struct page *page = (struct page *)malloc(sizeof(struct page)); // 가상 주소에 대응하는 해시 값 도출을 위해 새로운 페이지 할당
+	page->va = pg_round_down(va); // 가상 주소의 시작 주소를 페이지의 va에 복제
+	struct hash_elem *e = hash_find(&spt->spt_hash, &page->hash_elem); // spt hash 테이블에서 hash_elem과 같은 hash를 갖는 페이지를 찾아서 return
+	free(page); // 복제한 페이지 삭제
+
+	return e != NULL ? hash_entry(e, struct page, hash_elem) : NULL;
 }
 
 /* Insert PAGE into spt with validation. */
