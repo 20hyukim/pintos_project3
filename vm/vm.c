@@ -90,14 +90,19 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
-	int succ = false;
 	/* [Pseudo]
 	spt에 va가 있는 지 확인.
 	(true) -> 페이지 insert가 일어나선 안되겠지
 	(false) -> spt에 va에 해당하는 페이지 할당
+
+	사전 : spt_find_page()를 통해 va로 할당된 페이지 유무를 확인.
+	(있다면) ..?
+	(없다면) page->hash_elem을 통해 해시값을 찾고, 
+	       해시값의 위치에 해당되는 supplemental page table 위치에 insertion을 한다.
+	(결론) 성공 결과를 반환한다.
 	 */
 
-	return succ;
+	return hash_insert(&spt->spt_hash, &page->hash_elem) ? false : true;
 }
 
 void

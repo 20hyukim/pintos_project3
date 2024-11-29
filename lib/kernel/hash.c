@@ -95,10 +95,10 @@ hash_insert (struct hash *h, struct hash_elem *new) {
 	struct list *bucket = find_bucket (h, new);
 	struct hash_elem *old = find_elem (h, bucket, new);
 
-	if (old == NULL)
+	if (old == NULL) // old 라는 건, 이미 기존에 hash_elem이 있다면...
 		insert_elem (h, bucket, new);
 
-	rehash (h);
+	rehash (h); // 해시 테이블의 요소를 분산시키기 위해 버킷 개수를 재조정. 요소가 너무 많아져 충돌이 증가하면 버킷 개수를 늘려 충돌을 줄이는 등...
 
 	return old;
 }
@@ -277,7 +277,7 @@ uint64_t
 hash_int (int i) {
 	return hash_bytes (&i, sizeof i);
 }
-
+
 /* Returns the bucket in H that E belongs in. */
 static struct list *
 find_bucket (struct hash *h, struct hash_elem *e) {
