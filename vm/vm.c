@@ -13,8 +13,8 @@
  * intialize codes. */
 void
 vm_init (void) {
-	vm_anon_init ();
-	vm_file_init ();
+	vm_anon_init (); // 시스템 부팅 시 호출. VM과 관련된 설정
+	vm_file_init (); // 시스템 부팅 시 호출. VM과 관련된 설정
 #ifdef EFILESYS  /* For project 4 */
 	pagecache_init ();
 #endif
