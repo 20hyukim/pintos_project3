@@ -97,7 +97,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
     return TID_ERROR;
 
   struct thread *child = get_child(tid);
-  sema_down(&child->load_sema);
+  sema_down(&child->fork_sema);
 
   if (child->exit_status == -1)
     return TID_ERROR;
@@ -180,17 +180,17 @@ __do_fork (void *aux) {
 		goto error;
 #endif
   /* --- Project 2 - System call --- */
-  if (parent->fd_idx >= FD_COUNT_LIMIT)
+  if (parent->fd_idx >= FDCOUNT_LIMIT)
     goto error;
 
-  for (int i = 0; i < FD_COUNT_LIMIT; i++) {
-    struct file *f = parent->fd_table[i];
+  for (int i = 0; i < FDCOUNT_LIMIT; i++) {
+    struct file *f = parent->fdt[i];
     if (f == NULL)
       continue;
 
     if (i > 1)
       f = file_duplicate(f);
-    curr->fd_table[i] = f;
+    curr->fdt[i] = f;
   }
   curr->fd_idx = parent->fd_idx;
   /* ------------------------------- */
@@ -199,13 +199,13 @@ __do_fork (void *aux) {
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
-    sema_up(&curr->load_sema);
+    sema_up(&curr->fork_sema);
 		do_iret (&if_);
 
 error:
   /* --- Project 2 - System call --- */
   curr->exit_status = TID_ERROR;
-  sema_up(&curr->load_sema);
+  sema_up(&curr->fork_sema);
   /* ------------------------------- */
 
   process_exit ();
@@ -313,7 +313,7 @@ process_wait (tid_t child_tid UNUSED) {
     return -1;
 
   sema_down (&child->wait_sema);
-  list_remove(&child->c_elem);
+  list_remove(&child->child_elem);
   sema_up(&child->exit_sema);
 
   return child->exit_status;
@@ -324,11 +324,11 @@ void
 process_exit (void) {
   struct thread *curr = thread_current ();
 
-  for (int fd = 0; fd < FD_COUNT_LIMIT; fd++) {
+  for (int fd = 0; fd < FDCOUNT_LIMIT; fd++) {
     close(fd);
   }
 
-  palloc_free_multiple(curr->fd_table, FDT_PAGES);
+  palloc_free_multiple(curr->fdt, FDT_PAGES);
   file_close(curr->runn_file);
 
 	process_cleanup ();
@@ -600,7 +600,7 @@ struct thread *get_child (int tid) {
     return NULL;
 
   for (e = list_begin (child_list); e != list_end (child_list); e = list_next(e)) {
-    struct thread *t = list_entry(e, struct thread, c_elem);
+    struct thread *t = list_entry(e, struct thread, child_elem);
     if (t->tid == tid)
       return t;
   }

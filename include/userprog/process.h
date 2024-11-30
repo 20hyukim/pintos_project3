@@ -20,4 +20,8 @@ struct aux {
     size_t page_read_bytes;
 };
 
+#define STDIN 0x1
+#define STDOUT 0x2
+#define STDERR 0x3
+
 #endif /* userprog/process.h */

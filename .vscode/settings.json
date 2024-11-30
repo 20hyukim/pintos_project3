@@ -16,6 +16,7 @@
         "inode.h": "c",
         "vaddr.h": "c",
         "fixed_point.h": "c",
-        "vm.h": "c"
+        "vm.h": "c",
+        "stdint.h": "c"
     }
 }

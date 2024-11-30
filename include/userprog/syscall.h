@@ -37,8 +37,12 @@ static int filesize (int fd);
 static int read (int fd, void *buffer, unsigned length);
 static int write (int fd, const void *buffer, unsigned length);
 static void seek (int fd, unsigned position);
-static unsigned tell (int fd);
+static int tell (int fd);
 void close (int fd);
+
+/* project3 */
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
 
 static int dup2(int oldfd, int newfd);
 
