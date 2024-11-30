@@ -14,6 +14,8 @@
         "*.inc": "c",
         "filesys.h": "c",
         "inode.h": "c",
-        "vaddr.h": "c"
+        "vaddr.h": "c",
+        "fixed_point.h": "c",
+        "vm.h": "c"
     }
 }
