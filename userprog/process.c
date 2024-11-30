@@ -97,7 +97,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
     return TID_ERROR;
 
   struct thread *child = get_child(tid);
-  sema_down(&child->load_sema);
+  sema_down(&child->fork_sema);
 
   if (child->exit_status == -1)
     return TID_ERROR;
@@ -180,17 +180,17 @@ __do_fork (void *aux) {
 		goto error;
 #endif
   /* --- Project 2 - System call --- */
-  if (parent->fd_idx >= FD_COUNT_LIMIT)
+  if (parent->fd_idx >= FDCOUNT_LIMIT)
     goto error;
 
-  for (int i = 0; i < FD_COUNT_LIMIT; i++) {
-    struct file *f = parent->fd_table[i];
+  for (int i = 0; i < FDCOUNT_LIMIT; i++) {
+    struct file *f = parent->fdt[i];
     if (f == NULL)
       continue;
 
     if (i > 1)
       f = file_duplicate(f);
-    curr->fd_table[i] = f;
+    curr->fdt[i] = f;
   }
   curr->fd_idx = parent->fd_idx;
   /* ------------------------------- */
@@ -199,13 +199,13 @@ __do_fork (void *aux) {
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
-    sema_up(&curr->load_sema);
+    sema_up(&curr->fork_sema);
 		do_iret (&if_);
 
 error:
   /* --- Project 2 - System call --- */
   curr->exit_status = TID_ERROR;
-  sema_up(&curr->load_sema);
+  sema_up(&curr->fork_sema);
   /* ------------------------------- */
 
   process_exit ();
@@ -313,7 +313,7 @@ process_wait (tid_t child_tid UNUSED) {
     return -1;
 
   sema_down (&child->wait_sema);
-  list_remove(&child->c_elem);
+  list_remove(&child->child_elem);
   sema_up(&child->exit_sema);
 
   return child->exit_status;
@@ -324,11 +324,11 @@ void
 process_exit (void) {
   struct thread *curr = thread_current ();
 
-  for (int fd = 0; fd < FD_COUNT_LIMIT; fd++) {
+  for (int fd = 0; fd < FDCOUNT_LIMIT; fd++) {
     close(fd);
   }
 
-  palloc_free_multiple(curr->fd_table, FDT_PAGES);
+  palloc_free_multiple(curr->fdt, FDT_PAGES);
   file_close(curr->runn_file);
 
 	process_cleanup ();
@@ -600,7 +600,7 @@ struct thread *get_child (int tid) {
     return NULL;
 
   for (e = list_begin (child_list); e != list_end (child_list); e = list_next(e)) {
-    struct thread *t = list_entry(e, struct thread, c_elem);
+    struct thread *t = list_entry(e, struct thread, child_elem);
     if (t->tid == tid)
       return t;
   }
@@ -713,11 +713,40 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
+/* page fault 발생 시, lazy_load_segment가 호출되어
+ * 파일에서 데이터를 읽어 페이지에 로드
+ * 페이지를 물리 메모리에 연결하고 초기화 */
+static bool 
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+
+    /* <pseudo>
+     * aux - file pointer, offset, read size 등을 가져오기.
+     * 파일에서 데이터를 읽어서 페이지에 복사.
+     * 남은 공간은 0 으로 채우기.
+     * UNINIT PAGE 상태에 필요했던, aux 해제
+     * 
+     * page ->  va 에서, UNINIT 페이지를 찾기
+     * 실제 file에 접근해서 데이터를 가지고 와서 RAM에 할당하고, page와 연관짓기
+     */
+
+    struct aux *aux_p = aux;
+    struct file *file = aux_p->file;
+    off_t offset = aux_p->offset;
+    size_t page_read_bytes = aux_p->page_read_bytes;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+    file_seek(file, offset); // 파일을 offset부터 읽기
+    if (file_read(file, page->frame->kva, page_read_bytes) != (off_t)page_read_bytes) { // 물리 메모리에서 정상적으로 읽어오는지 확인.
+        palloc_free_page(page->frame->kva); // 제대로 못 읽었다면 free 시키고 false return
+        return false;
+    }
+
+    memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);  //남은 페이지 데이터들은 0으로 초기화
+
+    return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -734,7 +763,15 @@ lazy_load_segment (struct page *page, void *aux) {
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
-static bool
+
+/* 파일 (FILE) 의 OFS 오프셋에서 시작하여, UPAGE 주소에 세그먼트를 로드한다. OFS = 파일 내용 중 시작 위치를 의미하겠죠?
+ * 총 READ_BYTES + ZERO_BYTES 바이트의 VA가 초기화 됨
+ * UPAGE에서 시작 ~ READ_BYTES 바이트 크기의 가상 메모리가 초기화. (OFS에서 부터 읽어온 데이터들)
+ * UPAGE + READ_BYTES ~ ZERO_BYTES만큼의 데이터는 0으로 초기화
+ * WRITABLB = true인 경우, user process에서 쓰기가 가능해야 함. 그렇지 않은 경우엔, read-only 로 설정
+ * 성공시, true / 메모리 할당 오류 또는 디스크 읽기 오류, false
+ * */
+static bool /* 실행 파일의 세그먼트를 페이지 단위로 나누고 초기화 되지 않은 페이지로 설정.*/
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -749,7 +786,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+        struct aux *aux = (struct aux *)malloc(sizeof(struct aux));
+        aux->file = file;
+        aux->offset = ofs;
+        aux->page_read_bytes = page_read_bytes;
+
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
 			return false;
@@ -758,11 +799,17 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+        ofs += page_read_bytes;
 	}
 	return true;
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
+/* 스택의 경우엔 lazy loading이 아니라, 바로 할당 되어야 한다.
+ * arg1, arg2 를 stack에 넣고 (PM)
+ * spt에 해당 VM를 추가하고 
+ * 성공적으로 추가되었다면, sucess = true; 
+ * 그게 아니라면, false를 반환.*/
 static bool
 setup_stack (struct intr_frame *if_) {
 	bool success = false;
@@ -773,6 +820,122 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
 
+    if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1)) { //가상 주소 공간에 페이지를 생성하고 SPT에 등록
+        success = vm_claim_page(stack_bottom); // spt에서 페이지를 찾아 물리 메모리와 연결.
+
+        if (success) {
+            if_->rsp = USER_STACK; //다시 stack pointer를 최상단으로 설정하여, 프로세스가 스택을 올바르게 사용할 수 있도록.
+            thread_current()->stack_bottom = stack_bottom;
+        }
+    }
+
 	return success;
 }
 #endif /* VM */
+
+
+
+
+/** #Project 2: Command Line Parsing - 유저 스택에 파싱된 토큰을 저장하는 함수 */
+void argument_stack(char **argv, int argc, struct intr_frame *if_) {
+    char *arg_addr[100];
+    int argv_len;
+
+    for (int i = argc - 1; i >= 0; i--) {
+        argv_len = strlen(argv[i]) + 1;
+        if_->rsp -= argv_len;
+        memcpy(if_->rsp, argv[i], argv_len);
+        arg_addr[i] = if_->rsp;
+    }
+
+    while (if_->rsp % 8)
+        *(uint8_t *)(--if_->rsp) = 0;
+
+    if_->rsp -= 8;
+    memset(if_->rsp, 0, sizeof(char *));
+
+    for (int i = argc - 1; i >= 0; i--) {
+        if_->rsp -= 8;
+        memcpy(if_->rsp, &arg_addr[i], sizeof(char *));
+    }
+
+    if_->rsp = if_->rsp - 8;
+    memset(if_->rsp, 0, sizeof(void *));
+
+    if_->R.rdi = argc;
+    if_->R.rsi = if_->rsp + 8;
+}
+
+thread_t *get_child_process(int pid) {
+    thread_t *curr = thread_current();
+    thread_t *t;
+
+    for (struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)) {
+        t = list_entry(e, thread_t, child_elem);
+
+        if (pid == t->tid)
+            return t;
+    }
+
+    return NULL;
+}
+
+/** #Project 2: System Call - 현재 스레드 fdt에 파일 추가 */
+int process_add_file(struct file *f) {
+    thread_t *curr = thread_current();
+    struct file **fdt = curr->fdt;
+
+    if (curr->fd_idx >= FDCOUNT_LIMIT)
+        return -1;
+
+    /** Project 4: File System - dir-vine test로 인해 비어있는 fdt 탐색하도록 수정 */
+    for (int i = 0; i < curr->fd_idx; i++) {
+        if (fdt[i] == NULL) {
+            fdt[i] = f;
+            return i;
+        }
+    }
+
+    while (fdt[curr->fd_idx] != NULL)
+        curr->fd_idx++;
+
+    fdt[curr->fd_idx++] = f;
+
+    return curr->fd_idx - 1;
+}
+
+/** #Project 2: System Call - 현재 스레드의 fd번째 파일 정보 얻기 */
+struct file *process_get_file(int fd) {
+    thread_t *curr = thread_current();
+
+    if (fd < 0 || fd >= FDCOUNT_LIMIT)
+        return NULL;
+
+    return curr->fdt[fd];
+}
+
+/** #Project 2: System Call - 현재 스레드의 fdt에서 파일 삭제 */
+int process_close_file(int fd) {
+    thread_t *curr = thread_current();
+
+    if (fd < 0 || fd >= FDCOUNT_LIMIT)
+        return -1;
+
+    curr->fdt[fd] = NULL;
+    return 0;
+}
+
+int process_insert_file(int fd, struct file *f) {
+    thread_t *curr = thread_current();
+    struct file **fdt = curr->fdt;
+
+    if (fd < 0 || fd >= FDCOUNT_LIMIT)
+        return -1;
+
+    if (f > STDERR)
+        f->dup_count++;
+
+    fdt[fd] = f;
+
+    return fd;
+}

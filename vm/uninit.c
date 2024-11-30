@@ -30,11 +30,11 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 	ASSERT (page != NULL);
 
 	*page = (struct page) {
-		.operations = &uninit_ops,
+		.operations = &uninit_ops, // 여기서 .type을 VM_UNINIT으로 설정해 줌.
 		.va = va,
-		.frame = NULL, /* no frame for now */
+		.frame = NULL, /* no frame for now 아직 PM에 할당이 안됨*/
 		.uninit = (struct uninit_page) {
-			.init = init,
+			.init = init, // 초기화를 담당하는 함수 포인터. 
 			.type = type,
 			.aux = aux,
 			.page_initializer = initializer,
@@ -42,17 +42,20 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 	};
 }
 
-/* Initalize the page on first fault */
+/* Initalize the page on first fault; UNINIT을 실제 페이지 ANON 또는 FILE 등으로 변환. init을 호출하여 데이터를 설정*/
 static bool
 uninit_initialize (struct page *page, void *kva) {
-	struct uninit_page *uninit = &page->uninit;
+	struct uninit_page *uninit = &page->uninit; // page에서 uninit페이지를 선언하고 있는 것에 다가감. union이용.
 
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
 
 	/* TODO: You may need to fix this function. */
-	return uninit->page_initializer (page, uninit->type, kva) &&
+	/* uninit->type이, VM_UNINIT일 테니까, 페이지 타입에 따라, VM_ANON 또는, VM_FILE을 저장해줌.
+	 * .init을 이용해서, anon_initializer, file_backed_initializer를 저장
+	 */
+	return uninit->page_initializer (page, uninit->type, kva) && //kva = kernel virtual address
 		(init ? init (page, aux) : true);
 }
 
