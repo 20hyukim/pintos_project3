@@ -68,6 +68,9 @@ struct thread;
 struct frame {
 	void *kva; /* kva stands for kernel virtual address 물리 메모리 프레임이 커널 공간에서 어디에 매핑되었는지 나타냄.*/
 	struct page *page;
+
+	/* project3 */
+	struct list_elem frame_elem;
 };
 
 /* The function table for page operations.

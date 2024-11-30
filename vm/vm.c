@@ -9,6 +9,8 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+static struct list frame_table;
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -136,36 +138,67 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	return true;
 }
 
-/* Get the struct frame, that will be evicted. */
+/* Get the struct frame, that will be evicted. 제거할 프레임을 넘기는 것.*/
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
+	struct thread *curr = thread_current();
 
-	return victim;
+	struct list_elem *e = list_begin(&frame_table);
+	for (e; e != list_end(&frame_table); e = list_next(e)) {
+		victim = list_entry(e, struct frame, frame_elem);
+		if (pml4_is_accessed(curr->pml4, victim->page->va))
+			pml4_set_accessed(curr->pml4, victim->page->va, false);
+		else
+			return victim;
+	}
+	return list_entry(list_begin(&frame_table), struct frame, frame_elem);
 }
 
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim UNUSED = vm_get_victim ();
+	struct frame *victim UNUSED = vm_get_victim (); // 제거할 프레임을 선택하는 함수 vm_get_victim ^
 	/* TODO: swap out the victim and return the evicted frame. */
+	/* Pseudo code: 선언했던 frame_table에서, 제일 앞에 있는 frame 주소를 반환? */
+	
+	if (victim->page) // 해당 프레임에 페이지가 연결되어 있다면 swap_out을 시킨다. - 디스크의 swap 영역으로 보내는 함수.
+		swap_out(victim->page);
 
-	return NULL;
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
- * space.*/
+ * space.
+ * palloc()을 사용하여 프레임을 할당. 만약 사용할 수 있는 페이지가 없다면, 페이지를 교체하여 프레임을 반환.
+ * 이 함수는 항상 유효한 주소를 반환해야 한다. 
+ * if, 사용자 풀 메모리가 가득 찬 경우 -> vm_evict_frame을 이용해서 사용 가능한 메모리 공간을 확보
+ */
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
+	/* pseudo code
+	 * 남은 메모리가 있는지 확인
+	 * (남아있다면) lazy_load_segment를 호출하면 되는거 아닌가? 
+	 * (남아있지 않다면) vm_evict_frame을 호출하고, lazy_load_segment */
 
-	ASSERT (frame != NULL);
+	struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
+	ASSERT(frame != NULL);
+	
+	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO); // 유저 풀(PM)에서 페이지를 할당 받음. 또한, 할당 받은 페이지를 0으로 선언.
+
+	if (frame->kva == NULL)
+		frame = vm_evict_frame(); // swap out 실행
+	else
+		list_push_back(&frame_table, &frame->frame_elem); // frame 구조체에 frame_elem 추가.
+	
+	frame->page = NULL; // 현 시점에는, 아직 page랑 연결된 게 아니므로, 명시적으로 NULL을 넣어주어 이를 표현해준다.
 	ASSERT (frame->page == NULL);
+
 	return frame;
 }
 
