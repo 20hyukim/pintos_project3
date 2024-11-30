@@ -23,22 +23,27 @@ typedef int off_t;
 
 struct lock filesys_lock;
 
-static void check_addr(const char *f_addr);
+#ifndef VM
+void check_address(void *addr);
+#else
+/** #Project 3: Anonymous Page */
+struct page *check_address(void *addr);
+#endif
 
-static void halt (void) NO_RETURN;
-void exit (int status) NO_RETURN;
-static pid_t fork (const char *thread_name, struct intr_frame *);
-static int exec (const char *file);
-static int wait (pid_t);
-static bool create (const char *file, unsigned initial_size);
-static bool remove (const char *file);
-static int open (const char *file);
-static int filesize (int fd);
-static int read (int fd, void *buffer, unsigned length);
-static int write (int fd, const void *buffer, unsigned length);
-static void seek (int fd, unsigned position);
-static int tell (int fd);
-void close (int fd);
+void halt(void);
+void exit(int status);
+pid_t fork(const char *thread_name);
+int exec(const char *cmd_line);
+int wait(pid_t);
+bool create(const char *file, unsigned initial_size);
+bool remove(const char *file);
+int open(const char *file);
+int filesize(int fd);
+int read(int fd, void *buffer, unsigned length);
+int write(int fd, const void *buffer, unsigned length);
+void seek(int fd, unsigned position);
+int tell(int fd);
+void close(int fd);
 
 /* project3 */
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
