@@ -30,9 +30,9 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 	ASSERT (page != NULL);
 
 	*page = (struct page) {
-		.operations = &uninit_ops,
+		.operations = &uninit_ops, // 여기서 .type을 VM_UNINIT으로 설정해 줌.
 		.va = va,
-		.frame = NULL, /* no frame for now */
+		.frame = NULL, /* no frame for now 아직 PM에 할당이 안됨*/
 		.uninit = (struct uninit_page) {
 			.init = init,
 			.type = type,

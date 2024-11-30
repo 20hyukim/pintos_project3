@@ -45,7 +45,11 @@ struct thread;
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space -> will stand for virtual address */
 	struct frame *frame;   /* Back reference for frame -> 그니까 VM가 가리키는 PM' Frame을 의미 */
+	
+	/* project3 */
 	struct hash_elem hash_elem;
+	bool writable;
+	bool accessible;
 	/* Your implementation */
 
 	/* Per-type data are binded into the union.
