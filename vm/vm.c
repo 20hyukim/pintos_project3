@@ -214,21 +214,16 @@ vm_handle_wp (struct page *page UNUSED) {
 }
 
 /* Return true on success */
-bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = spt_find_page(&thread_current()->spt, addr);
-	/* Pseudo Code
-	 * spt_find_page(spt, addr) 를 통해서 해당하는 페이지 찾기
-	 */
-	/* TODO: Validate the fault */
-	if (addr == NULL || is_kernel_vaddr(addr))
-		return false;
+/** Project 3: Memory Management - Return true on success */
+bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+    struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
+    struct page *page = spt_find_page(&thread_current()->spt, addr);
 
-	/* TODO: Your code goes here - extra */
+    /* TODO: Validate the fault */
+    if (addr == NULL || is_kernel_vaddr(addr))
+        return false;
 
-	return vm_do_claim_page (page);
+    return vm_do_claim_page(page);  // demand page 수행
 }
 
 /* Free the page.
@@ -240,26 +235,29 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
-bool
-vm_claim_page (void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: Fill this function */
+bool vm_claim_page(void *va UNUSED) {
+    /* TODO: Fill this function */
+    struct page *page = spt_find_page(&thread_current()->spt, va);
 
-	return vm_do_claim_page (page);
+    if (page == NULL)
+        return false;
+
+    return vm_do_claim_page(page);
 }
 
-/* Claim the PAGE and set up the mmu. */
-static bool
-vm_do_claim_page (struct page *page) {
-	struct frame *frame = vm_get_frame ();
+/** Project 3: Memory Management - PAGE를 요청하고 mmu를 설정하십시오. */
+static bool vm_do_claim_page(struct page *page) {
+    struct frame *frame = vm_get_frame();
 
-	/* Set links */
-	frame->page = page;
-	page->frame = frame;
+    /* Set links */
+    frame->page = page;
+    page->frame = frame;
 
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+    /* TODO: Insert page table entry to map page's VA to frame's PA. */
+    if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
+        return false;
 
-	return swap_in (page, frame->kva);
+    return swap_in(page, frame->kva);  // uninit_initialize
 }
 
 /* Initialize new supplemental page table */

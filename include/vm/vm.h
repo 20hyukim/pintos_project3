@@ -37,6 +37,10 @@ struct thread;
 
 #define VM_TYPE(type) ((type) & 7) /* type의 하위 3비트를 추출하여 페이지의 타입 반환. VM_TYPE(some_type) 을 통해 -> 익명 페이지인지, 파일 페이지인지... 에 대해서 반환함. */
 
+
+#define STACK_LIMIT (USER_STACK - (1 << 20))
+
+
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
