@@ -832,3 +832,110 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 #endif /* VM */
+
+
+
+
+/** #Project 2: Command Line Parsing - 유저 스택에 파싱된 토큰을 저장하는 함수 */
+void argument_stack(char **argv, int argc, struct intr_frame *if_) {
+    char *arg_addr[100];
+    int argv_len;
+
+    for (int i = argc - 1; i >= 0; i--) {
+        argv_len = strlen(argv[i]) + 1;
+        if_->rsp -= argv_len;
+        memcpy(if_->rsp, argv[i], argv_len);
+        arg_addr[i] = if_->rsp;
+    }
+
+    while (if_->rsp % 8)
+        *(uint8_t *)(--if_->rsp) = 0;
+
+    if_->rsp -= 8;
+    memset(if_->rsp, 0, sizeof(char *));
+
+    for (int i = argc - 1; i >= 0; i--) {
+        if_->rsp -= 8;
+        memcpy(if_->rsp, &arg_addr[i], sizeof(char *));
+    }
+
+    if_->rsp = if_->rsp - 8;
+    memset(if_->rsp, 0, sizeof(void *));
+
+    if_->R.rdi = argc;
+    if_->R.rsi = if_->rsp + 8;
+}
+
+thread_t *get_child_process(int pid) {
+    thread_t *curr = thread_current();
+    thread_t *t;
+
+    for (struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)) {
+        t = list_entry(e, thread_t, child_elem);
+
+        if (pid == t->tid)
+            return t;
+    }
+
+    return NULL;
+}
+
+/** #Project 2: System Call - 현재 스레드 fdt에 파일 추가 */
+int process_add_file(struct file *f) {
+    thread_t *curr = thread_current();
+    struct file **fdt = curr->fdt;
+
+    if (curr->fd_idx >= FDCOUNT_LIMIT)
+        return -1;
+
+    /** Project 4: File System - dir-vine test로 인해 비어있는 fdt 탐색하도록 수정 */
+    for (int i = 0; i < curr->fd_idx; i++) {
+        if (fdt[i] == NULL) {
+            fdt[i] = f;
+            return i;
+        }
+    }
+
+    while (fdt[curr->fd_idx] != NULL)
+        curr->fd_idx++;
+
+    fdt[curr->fd_idx++] = f;
+
+    return curr->fd_idx - 1;
+}
+
+/** #Project 2: System Call - 현재 스레드의 fd번째 파일 정보 얻기 */
+struct file *process_get_file(int fd) {
+    thread_t *curr = thread_current();
+
+    if (fd < 0 || fd >= FDCOUNT_LIMIT)
+        return NULL;
+
+    return curr->fdt[fd];
+}
+
+/** #Project 2: System Call - 현재 스레드의 fdt에서 파일 삭제 */
+int process_close_file(int fd) {
+    thread_t *curr = thread_current();
+
+    if (fd < 0 || fd >= FDCOUNT_LIMIT)
+        return -1;
+
+    curr->fdt[fd] = NULL;
+    return 0;
+}
+
+int process_insert_file(int fd, struct file *f) {
+    thread_t *curr = thread_current();
+    struct file **fdt = curr->fdt;
+
+    if (fd < 0 || fd >= FDCOUNT_LIMIT)
+        return -1;
+
+    if (f > STDERR)
+        f->dup_count++;
+
+    fdt[fd] = f;
+
+    return fd;
+}
