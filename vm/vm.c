@@ -184,9 +184,15 @@ bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = NULL;
+	struct page *page = spt_find_page(&thread_current()->spt, addr);
+	/* Pseudo Code
+	 * spt_find_page(spt, addr) 를 통해서 해당하는 페이지 찾기
+	 */
 	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
+	if (addr == NULL || is_kernel_vaddr(addr))
+		return false;
+
+	/* TODO: Your code goes here - extra */
 
 	return vm_do_claim_page (page);
 }
